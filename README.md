@@ -74,6 +74,10 @@ EpiQuest/
 ## 👥 Équipe
 
 Projet réalisé par des étudiants Tek2 — Epitech Bénin.
+TOGBE Naofal
+OROUNLA Sèdjro
+ONAMBELE Charly-Luck
+ALAO OLAIFE
 
 ---
 
