@@ -40,7 +40,7 @@ EpiQuest est une web app qui permet aux visiteurs d'une JPO Epitech de découvri
 
 ```bash
 # Cloner le repo
-git clone https://github.com/ton-pseudo/EpiQuest.git
+git clone https://github.com/Tempest-Storm/EpiQuest.git
 cd EpiQuest
 
 # Frontend
