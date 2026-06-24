@@ -9,6 +9,7 @@ const jwt = require('jsonwebtoken')
 const session = require('express-session')
 const { authMiddleware } = require('./auth')
 const { assertEnv } = require('./config')
+const { isPlausibleScore } = require('./scoreGuard')
 require('dotenv').config()
 
 // Fail fast with a clear message if the server is misconfigured.
@@ -196,6 +197,12 @@ app.post('/players', authMiddleware, async (req, res) => {
   }
 
   try {
+    // Scoring is computed client-side, so guard against spoofed submissions.
+    const { rows: [{ count }] } = await pool.query('SELECT COUNT(*)::int AS count FROM questions')
+    if (!isPlausibleScore(score, correct, count)) {
+      return res.status(400).json({ error: 'Submitted score is not plausible' })
+    }
+
     // Upsert — keep the player's best score. correct and created_at are
     // only updated when this run beats the stored score, so they always
     // describe the same run as the score that is kept.
