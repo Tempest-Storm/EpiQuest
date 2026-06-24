@@ -11,26 +11,49 @@ export default function Quiz() {
   const [timeLeft, setTimeLeft] = useState(20)
   const [answered, setAnswered] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const [user, setUser] = useState(null)
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
 
+  // Safely decode the payload of a JWT without verifying its signature.
+  // Returns null for anything malformed so callers can redirect to login
+  // instead of crashing the whole page.
+  const decodeToken = (t) => {
+    try {
+      return JSON.parse(atob(t.split('.')[1]))
+    } catch {
+      return null
+    }
+  }
+
   useEffect(() => {
     const token = searchParams.get('token')
     if (token) {
+      const payload = decodeToken(token)
+      if (!payload) { navigate('/'); return }
       localStorage.setItem('token', token)
-      const payload = JSON.parse(atob(token.split('.')[1]))
       setUser(payload)
       localStorage.setItem('player', JSON.stringify({ pseudo: payload.name, avatar: payload.avatar_url }))
     } else {
       const existing = localStorage.getItem('token')
       if (!existing) { navigate('/'); return }
-      const payload = JSON.parse(atob(existing.split('.')[1]))
+      const payload = decodeToken(existing)
+      if (!payload) { localStorage.removeItem('token'); navigate('/'); return }
       setUser(payload)
     }
     fetch(`${API}/questions`)
-      .then(r => r.json())
-      .then(data => { setQuestions(data); setLoading(false) })
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+      .then(data => {
+        if (!Array.isArray(data)) throw new Error('Unexpected response')
+        setQuestions(data)
+        setLoading(false)
+      })
+      .catch((err) => {
+        console.error('Failed to load questions:', err)
+        setError(true)
+        setLoading(false)
+      })
   }, [])
 
 useEffect(() => {
@@ -62,19 +85,23 @@ useEffect(() => {
     const finalCorrect = currentCorrect ?? correct
     if (current + 1 >= questions.length) {
       const token = localStorage.getItem('token')
+      // Store the local recap first so the player always sees their result,
+      // even if persisting the score to the server fails.
+      localStorage.setItem('result', JSON.stringify({
+        pseudo: user?.name,
+        avatar: user?.avatar_url,
+        score: finalScore,
+        correct: finalCorrect,
+        total: questions.length
+      }))
       fetch(`${API}/players`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ score: finalScore, correct: finalCorrect })
-      }).then(() => {
-        localStorage.setItem('result', JSON.stringify({
-          pseudo: user?.name,
-          avatar: user?.avatar_url,
-          score: finalScore,
-          total: questions.length
-        }))
-        navigate('/leaderboard')
       })
+        .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`) })
+        .catch(err => console.error('Failed to save score:', err))
+        .finally(() => navigate('/leaderboard'))
     } else {
       setCurrent(c => c + 1)
       setSelected(null)
@@ -86,6 +113,22 @@ useEffect(() => {
   if (loading) return (
     <div className="min-h-screen bg-[#F5F4F2] flex items-center justify-center">
       <p className="text-gray-400 text-sm">Chargement des questions...</p>
+    </div>
+  )
+
+  if (error || questions.length === 0) return (
+    <div className="min-h-screen bg-[#F5F4F2] flex items-center justify-center p-4">
+      <div className="w-full max-w-sm bg-white rounded-3xl p-6 text-center shadow-xl flex flex-col gap-4">
+        <p className="text-gray-600 text-sm">
+          Impossible de charger le quiz pour le moment. Réessaie un peu plus tard.
+        </p>
+        <button
+          onClick={() => navigate('/')}
+          className="w-full bg-indigo-600 text-white font-semibold py-3 rounded-2xl text-sm"
+        >
+          Retour à l'accueil
+        </button>
+      </div>
     </div>
   )
 
