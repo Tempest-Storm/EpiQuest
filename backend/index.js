@@ -244,3 +244,18 @@ initDatabase()
     console.error('❌ Fatal: could not initialize database, shutting down:', err.message)
     process.exit(1)
   })
+
+// Graceful shutdown: stop accepting connections, then close the DB pool so
+// container/VPS restarts don't leak connections or drop in-flight requests.
+let shuttingDown = false
+function shutdown(signal) {
+  if (shuttingDown) return
+  shuttingDown = true
+  console.log(`\n${signal} received — shutting down gracefully...`)
+  server.close(() => {
+    pool.end().finally(() => process.exit(0))
+  })
+  // Don't hang forever if connections refuse to close.
+  setTimeout(() => process.exit(1), 10000).unref()
+}
+;['SIGINT', 'SIGTERM'].forEach((sig) => process.on(sig, () => shutdown(sig)))
