@@ -152,6 +152,19 @@ app.get('/auth/google/callback',
   }
 )
 
+// ── HEALTH ────────────────────────────────────────────────────
+// Lightweight liveness/readiness probe for deployment (Docker, VPS,
+// load balancers). Reports 200 only when the database is reachable.
+app.get('/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1')
+    res.json({ status: 'ok', db: 'up' })
+  } catch (err) {
+    console.error('❌ Health check failed:', err.message)
+    res.status(503).json({ status: 'error', db: 'down' })
+  }
+})
+
 // ── GAME ROUTES ───────────────────────────────────────────────
 app.get('/questions', async (req, res) => {
   try {
