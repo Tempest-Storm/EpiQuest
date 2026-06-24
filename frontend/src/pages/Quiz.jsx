@@ -59,8 +59,6 @@ useEffect(() => {
   }
 
   const handleNext = (currentScore, currentCorrect) => {
-    console.log('handleNext called', { current, questionsLength: questions.length, currentScore, currentCorrect })
-const handleNext = (currentScore, currentCorrect) => {
     const finalScore = currentScore ?? score
     const finalCorrect = currentCorrect ?? correct
     if (current + 1 >= questions.length) {
