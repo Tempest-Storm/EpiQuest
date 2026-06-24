@@ -38,24 +38,45 @@ EpiQuest est une web app qui permet aux visiteurs d'une JPO Epitech de découvri
 
 ## 🚀 Lancer le projet
 
-```bash
-# Cloner le repo
-git clone https://github.com/Tempest-Storm/EpiQuest.git
-cd EpiQuest
+### Prérequis
 
-# Frontend
+- Node.js 18+ (le backend utilise le test runner intégré `node --test`)
+- PostgreSQL en cours d'exécution
+- Des identifiants OAuth Google (Google Cloud Console)
+
+### Base de données
+
+Crée une base vide :
+
+```bash
+createdb epiquest
+```
+
+Le backend applique automatiquement le schéma au démarrage (création des
+tables `users`, `players`, `questions`) et insère un quiz Epitech par
+défaut si la table `questions` est vide. Le schéma de référence est versionné
+dans [`database/schema.sql`](database/schema.sql).
+
+### Backend
+
+```bash
+cd backend
+npm install
+cp .env.example .env   # puis renseigne les variables (DB, secrets, OAuth Google)
+npm run dev            # démarre l'API + WebSocket sur le PORT configuré
+npm test               # lance la suite de tests
+```
+
+### Frontend
+
+```bash
 cd frontend
 npm install
-npm run dev
-
-# Backend
-cd ../backend
-npm install
-cp .env.example .env
+cp .env.example .env   # optionnel : VITE_API_URL (défaut http://localhost:3001)
 npm run dev
 ```
 
-> Les variables d'environnement et la config Docker seront ajoutées au fur et à mesure des sprints.
+> La configuration Docker sera ajoutée au fur et à mesure des sprints.
 
 ---
 
@@ -63,10 +84,13 @@ npm run dev
 
 ```
 EpiQuest/
-├── frontend/       # React app
-├── backend/        # API REST + WebSocket
-├── database/       # Schéma SQL et migrations
-└── docs/           # Cahier des charges + maquettes
+├── frontend/       # React app (Vite + Tailwind)
+├── backend/        # API REST + WebSocket (Express + Socket.io)
+│   ├── index.js          # point d'entrée serveur
+│   ├── auth.js           # middleware d'authentification JWT
+│   ├── seedQuestions.js  # quiz Epitech par défaut
+│   └── test/             # tests (node --test)
+└── database/       # Schéma SQL de référence
 ```
 
 ---
