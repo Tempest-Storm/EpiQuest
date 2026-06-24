@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { API } from '../config'
+import { computeScore, MAX_TIME } from '../lib/score'
 
 // Safely decode the payload of a JWT without verifying its signature.
 // Returns null for anything malformed so callers can redirect to login
@@ -28,7 +29,7 @@ export default function Quiz() {
   const [selected, setSelected] = useState(null)
   const [score, setScore] = useState(0)
   const [correct, setCorrect] = useState(0)
-  const [timeLeft, setTimeLeft] = useState(20)
+  const [timeLeft, setTimeLeft] = useState(MAX_TIME)
   const [answered, setAnswered] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -87,7 +88,7 @@ export default function Quiz() {
       setCurrent(c => c + 1)
       setSelected(null)
       setAnswered(false)
-      setTimeLeft(20)
+      setTimeLeft(MAX_TIME)
     }
   }, [score, correct, current, questions, user, token, navigate])
 
@@ -99,7 +100,7 @@ export default function Quiz() {
     let newScore = score
     let newCorrect = correct
     if (isCorrect) {
-      newScore = score + Math.ceil((timeLeft / 20) * 100) + 50
+      newScore = score + computeScore(timeLeft)
       newCorrect = correct + 1
       setScore(newScore)
       setCorrect(newCorrect)
