@@ -124,8 +124,12 @@ passport.use(new GoogleStrategy({
 
 passport.serializeUser((user, done) => done(null, user.id))
 passport.deserializeUser(async (id, done) => {
-  const result = await pool.query('SELECT * FROM users WHERE id = $1', [id])
-  done(null, result.rows[0])
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE id = $1', [id])
+    done(null, result.rows[0])
+  } catch (err) {
+    done(err)
+  }
 })
 
 // ── AUTH ROUTES ───────────────────────────────────────────────
@@ -136,7 +140,7 @@ app.get('/auth/google',
 app.get('/auth/google/callback',
   (req, res, next) => {
     passport.authenticate('google', { failureRedirect: `${process.env.FRONTEND_URL}?error=auth` }, (err, user, info) => {
-      if (err) { console.error('❌ Auth error:', err); return res.status(500).send(err.message) }
+      if (err) { console.error('❌ Auth error:', err); return res.redirect(`${process.env.FRONTEND_URL}?error=auth`) }
       if (!user) { console.error('❌ No user:', info); return res.redirect(`${process.env.FRONTEND_URL}?error=auth`) }
       const token = jwt.sign(
         { id: user.id, name: user.name, email: user.email, avatar_url: user.avatar_url },
