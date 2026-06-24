@@ -1,8 +1,28 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { API } from '../config'
 
+// Safely decode the payload of a JWT without verifying its signature.
+// Returns null for anything malformed so callers can redirect to login
+// instead of crashing the whole page.
+function decodeToken(t) {
+  try {
+    return JSON.parse(atob(t.split('.')[1]))
+  } catch {
+    return null
+  }
+}
+
 export default function Quiz() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+
+  // The token may arrive in the URL (fresh login) or already be in
+  // localStorage (returning player). Resolve it and the decoded user once,
+  // synchronously, on first render.
+  const [token] = useState(() => searchParams.get('token') || localStorage.getItem('token'))
+  const [user] = useState(() => (token ? decodeToken(token) : null))
+
   const [questions, setQuestions] = useState([])
   const [current, setCurrent] = useState(0)
   const [selected, setSelected] = useState(null)
@@ -12,36 +32,22 @@ export default function Quiz() {
   const [answered, setAnswered] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
-  const [user, setUser] = useState(null)
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
 
-  // Safely decode the payload of a JWT without verifying its signature.
-  // Returns null for anything malformed so callers can redirect to login
-  // instead of crashing the whole page.
-  const decodeToken = (t) => {
-    try {
-      return JSON.parse(atob(t.split('.')[1]))
-    } catch {
-      return null
-    }
-  }
-
+  // Persist the session for returning players, or bounce to login if there
+  // is no valid token.
   useEffect(() => {
-    const token = searchParams.get('token')
-    if (token) {
-      const payload = decodeToken(token)
-      if (!payload) { navigate('/'); return }
-      localStorage.setItem('token', token)
-      setUser(payload)
-      localStorage.setItem('player', JSON.stringify({ pseudo: payload.name, avatar: payload.avatar_url }))
-    } else {
-      const existing = localStorage.getItem('token')
-      if (!existing) { navigate('/'); return }
-      const payload = decodeToken(existing)
-      if (!payload) { localStorage.removeItem('token'); navigate('/'); return }
-      setUser(payload)
+    if (!user) {
+      localStorage.removeItem('token')
+      navigate('/')
+      return
     }
+    localStorage.setItem('token', token)
+    localStorage.setItem('player', JSON.stringify({ pseudo: user.name, avatar: user.avatar_url }))
+  }, [user, token, navigate])
+
+  // Load the questions once the player is authenticated.
+  useEffect(() => {
+    if (!user) return
     fetch(`${API}/questions`)
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
       .then(data => {
@@ -54,37 +60,12 @@ export default function Quiz() {
         setError(true)
         setLoading(false)
       })
-  }, [])
+  }, [user])
 
-useEffect(() => {
-    if (answered || loading || questions.length === 0) return
-    if (timeLeft === 0) { handleNext(); return }
-    const t = setTimeout(() => setTimeLeft(t => t - 1), 1000)
-    return () => clearTimeout(t)
-  }, [timeLeft, answered, loading, questions])
-
-
-  const handleSelect = (i) => {
-    if (answered) return
-    setSelected(i)
-    setAnswered(true)
-    const isCorrect = i === questions[current].answer
-    let newScore = score
-    let newCorrect = correct
-    if (isCorrect) {
-      newScore = score + Math.ceil((timeLeft / 20) * 100) + 50
-      newCorrect = correct + 1
-      setScore(newScore)
-      setCorrect(newCorrect)
-    }
-    setTimeout(() => handleNext(newScore, newCorrect), 1000)
-  }
-
-  const handleNext = (currentScore, currentCorrect) => {
+  const handleNext = useCallback((currentScore, currentCorrect) => {
     const finalScore = currentScore ?? score
     const finalCorrect = currentCorrect ?? correct
     if (current + 1 >= questions.length) {
-      const token = localStorage.getItem('token')
       // Store the local recap first so the player always sees their result,
       // even if persisting the score to the server fails.
       localStorage.setItem('result', JSON.stringify({
@@ -108,7 +89,35 @@ useEffect(() => {
       setAnswered(false)
       setTimeLeft(20)
     }
+  }, [score, correct, current, questions, user, token, navigate])
+
+  const handleSelect = (i) => {
+    if (answered) return
+    setSelected(i)
+    setAnswered(true)
+    const isCorrect = i === questions[current].answer
+    let newScore = score
+    let newCorrect = correct
+    if (isCorrect) {
+      newScore = score + Math.ceil((timeLeft / 20) * 100) + 50
+      newCorrect = correct + 1
+      setScore(newScore)
+      setCorrect(newCorrect)
+    }
+    setTimeout(() => handleNext(newScore, newCorrect), 1000)
   }
+
+  useEffect(() => {
+    if (answered || loading || questions.length === 0 || timeLeft <= 0) return
+    // On each tick, either count down or — when the last second elapses —
+    // advance to the next question. Doing both inside the timer callback
+    // keeps the state updates out of the effect body.
+    const t = setTimeout(() => {
+      if (timeLeft <= 1) handleNext()
+      else setTimeLeft(v => v - 1)
+    }, 1000)
+    return () => clearTimeout(t)
+  }, [timeLeft, answered, loading, questions, handleNext])
 
   if (loading) return (
     <div className="min-h-screen bg-[#F5F4F2] flex items-center justify-center">
