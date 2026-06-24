@@ -8,7 +8,17 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy
 const jwt = require('jsonwebtoken')
 const session = require('express-session')
 const { authMiddleware } = require('./auth')
+const { assertEnv } = require('./config')
 require('dotenv').config()
+
+// Fail fast with a clear message if the server is misconfigured.
+try {
+  assertEnv()
+} catch (err) {
+  console.error(`❌ ${err.message}`)
+  console.error('   See backend/.env.example for the full list of variables.')
+  process.exit(1)
+}
 
 const app = express()
 const server = http.createServer(app)
