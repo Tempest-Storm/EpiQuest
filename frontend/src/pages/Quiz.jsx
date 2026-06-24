@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-
-const API = 'http://localhost:3001'
+import { API } from '../config'
 
 export default function Quiz() {
   const [questions, setQuestions] = useState([])

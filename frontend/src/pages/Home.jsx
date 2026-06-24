@@ -1,4 +1,4 @@
-const API = 'http://localhost:3001'
+import { API } from '../config'
 
 export default function Home() {
   const handleGoogleLogin = () => {

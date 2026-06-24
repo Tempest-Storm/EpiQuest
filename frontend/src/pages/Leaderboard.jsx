@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { io } from 'socket.io-client'
+import { API } from '../config'
 
-const API = 'http://localhost:3001'
 const socket = io(API)
 
 export default function Leaderboard() {
