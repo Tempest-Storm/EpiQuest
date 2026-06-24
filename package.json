@@ -1,0 +1,20 @@
+{
+  "name": "epiquest",
+  "version": "1.0.0",
+  "description": "> Jeu interactif accessible par QR code pour les Journées Portes Ouvertes d'Epitech.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Tempest-Storm/EpiQuest.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Tempest-Storm/EpiQuest/issues"
+  },
+  "homepage": "https://github.com/Tempest-Storm/EpiQuest#readme"
+}
