@@ -7,6 +7,7 @@ const passport = require('passport')
 const GoogleStrategy = require('passport-google-oauth20').Strategy
 const jwt = require('jsonwebtoken')
 const session = require('express-session')
+const { authMiddleware } = require('./auth')
 require('dotenv').config()
 
 const app = express()
@@ -146,18 +147,6 @@ app.get('/auth/google/callback',
     })(req, res, next)
   }
 )
-
-// ── MIDDLEWARE ────────────────────────────────────────────────
-const authMiddleware = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1]
-  if (!token) return res.status(401).json({ error: 'No token' })
-  try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET)
-    next()
-  } catch {
-    res.status(401).json({ error: 'Invalid token' })
-  }
-}
 
 // ── GAME ROUTES ───────────────────────────────────────────────
 app.get('/questions', async (req, res) => {

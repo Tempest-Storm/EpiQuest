@@ -4,7 +4,7 @@
   "description": "> Jeu interactif accessible par QR code pour les Journées Portes Ouvertes d'Epitech.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm --prefix backend test"
   },
   "repository": {
     "type": "git",
