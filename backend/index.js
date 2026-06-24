@@ -159,24 +159,33 @@ app.get('/questions', async (req, res) => {
 })
 
 app.post('/players', authMiddleware, async (req, res) => {
-    console.log('📥 POST /players hit', req.body, req.user)
   const { score, correct } = req.body
   const { id, name, avatar_url } = req.user
+
+  // Reject anything that isn't a sane, non-negative integer.
+  const isValid = (n) => Number.isInteger(n) && n >= 0
+  if (!isValid(score) || !isValid(correct)) {
+    return res.status(400).json({ error: 'score and correct must be non-negative integers' })
+  }
+
   try {
-    // Upsert — update score if better
+    // Upsert — keep the player's best score. correct and created_at are
+    // only updated when this run beats the stored score, so they always
+    // describe the same run as the score that is kept.
     const result = await pool.query(`
       INSERT INTO players (user_id, pseudo, avatar, score, correct)
       VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT (user_id)
       DO UPDATE SET
         score = GREATEST(players.score, EXCLUDED.score),
-        correct = EXCLUDED.correct,
-        created_at = NOW()
+        correct = CASE WHEN EXCLUDED.score > players.score THEN EXCLUDED.correct ELSE players.correct END,
+        created_at = CASE WHEN EXCLUDED.score > players.score THEN NOW() ELSE players.created_at END
       RETURNING *
     `, [id, name, avatar_url, score, correct])
     io.emit('leaderboard:update')
     res.json(result.rows[0])
   } catch (err) {
+    console.error('❌ POST /players error:', err.message)
     res.status(500).json({ error: err.message })
   }
 })
@@ -188,7 +197,7 @@ app.get('/leaderboard', async (req, res) => {
     )
     res.json(result.rows)
   } catch (err) {
-    console.error('❌ POST /players error:', err.message)
+    console.error('❌ GET /leaderboard error:', err.message)
     res.status(500).json({ error: err.message })
   }
 })
