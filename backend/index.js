@@ -23,29 +23,84 @@ app.use(session({
 app.use(passport.initialize())
 app.use(passport.session())
 
+const seedQuestions = require('./seedQuestions')
+
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
-pool.query('SELECT NOW()', (err, res) => {
-  if (err) console.error('❌ DB connection failed:', err.message)
-  else console.log('✅ DB connected at', res.rows[0].now)
-})
+// Create / migrate the schema in a single ordered transaction so that
+// dependent objects (foreign keys, the user_id unique constraint the
+// upsert relies on) are guaranteed to exist before any request is served.
+// Each statement is idempotent, so this is safe to run on every boot.
+async function initDatabase() {
+  const client = await pool.connect()
+  try {
+    const { rows } = await client.query('SELECT NOW()')
+    console.log('✅ DB connected at', rows[0].now)
 
-// Create users table if not exists
-pool.query(`
-  CREATE TABLE IF NOT EXISTS users (
-    id SERIAL PRIMARY KEY,
-    google_id VARCHAR(100) UNIQUE NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    name VARCHAR(100) NOT NULL,
-    avatar_url TEXT,
-    created_at TIMESTAMP DEFAULT NOW()
-  )
-`)
+    await client.query('BEGIN')
 
-// Update players table to link to users
-pool.query(`
-  ALTER TABLE players ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)
-`)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        google_id VARCHAR(100) UNIQUE NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        avatar_url TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `)
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS players (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        pseudo VARCHAR(100) NOT NULL,
+        avatar TEXT,
+        score INTEGER NOT NULL DEFAULT 0,
+        correct INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `)
+
+    // For pre-existing player tables created before user_id was introduced.
+    await client.query('ALTER TABLE players ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)')
+    // The POST /players upsert uses ON CONFLICT (user_id); a unique index is required.
+    await client.query('CREATE UNIQUE INDEX IF NOT EXISTS players_user_id_key ON players(user_id)')
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS questions (
+        id SERIAL PRIMARY KEY,
+        question TEXT NOT NULL,
+        options JSONB NOT NULL,
+        answer INTEGER NOT NULL
+      )
+    `)
+
+    await client.query('COMMIT')
+
+    await seedQuestionsIfEmpty()
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    console.error('❌ DB initialization failed:', err.message)
+    throw err
+  } finally {
+    client.release()
+  }
+}
+
+// Populate the questions table with the default Epitech quiz the first time
+// the app runs against an empty database. Existing questions are never touched.
+async function seedQuestionsIfEmpty() {
+  const { rows } = await pool.query('SELECT COUNT(*)::int AS count FROM questions')
+  if (rows[0].count > 0) return
+  for (const q of seedQuestions) {
+    await pool.query(
+      'INSERT INTO questions (question, options, answer) VALUES ($1, $2, $3)',
+      [q.question, JSON.stringify(q.options), q.answer]
+    )
+  }
+  console.log(`🌱 Seeded ${seedQuestions.length} default questions`)
+}
 
 // ── PASSPORT ──────────────────────────────────────────────────
 passport.use(new GoogleStrategy({
@@ -155,4 +210,12 @@ io.on('connection', (socket) => {
 })
 
 const PORT = process.env.PORT || 3001
-server.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`))
+
+initDatabase()
+  .then(() => {
+    server.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`))
+  })
+  .catch((err) => {
+    console.error('❌ Fatal: could not initialize database, shutting down:', err.message)
+    process.exit(1)
+  })
