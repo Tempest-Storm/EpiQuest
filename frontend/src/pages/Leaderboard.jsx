@@ -17,12 +17,19 @@ export default function Leaderboard() {
       .then(data => {
         if (Array.isArray(data)) setScores(data)
       })
+      .catch(err => console.error('Failed to load leaderboard:', err))
   }
 
   useEffect(() => {
     fetchLeaderboard()
-    socket.on('leaderboard:update', fetchLeaderboard)
-    return () => socket.off('leaderboard:update')
+    // The server pushes the updated standings with the event payload; only
+    // fall back to a fetch if it is missing.
+    const onUpdate = (rows) => {
+      if (Array.isArray(rows)) setScores(rows)
+      else fetchLeaderboard()
+    }
+    socket.on('leaderboard:update', onUpdate)
+    return () => socket.off('leaderboard:update', onUpdate)
   }, [])
 
   const medals = ['🥇', '🥈', '🥉']

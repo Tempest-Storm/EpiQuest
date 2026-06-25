@@ -216,7 +216,11 @@ app.post('/players', authMiddleware, async (req, res) => {
         created_at = CASE WHEN EXCLUDED.score > players.score THEN NOW() ELSE players.created_at END
       RETURNING *
     `, [id, name, avatar_url, score, correct])
-    io.emit('leaderboard:update')
+    // Push the new standings to every client in a single query, instead of
+    // signalling each client to re-fetch /leaderboard (which scaled as
+    // submissions × connected clients). Clients fall back to fetching if the
+    // payload is ever missing.
+    io.emit('leaderboard:update', await fetchTopPlayers())
     res.json(result.rows[0])
   } catch (err) {
     console.error('❌ POST /players error:', err.message)
@@ -224,12 +228,17 @@ app.post('/players', authMiddleware, async (req, res) => {
   }
 })
 
+// Top 10 players by score — the shape the leaderboard renders.
+async function fetchTopPlayers() {
+  const result = await pool.query(
+    'SELECT pseudo, avatar, score, correct FROM players ORDER BY score DESC LIMIT 10'
+  )
+  return result.rows
+}
+
 app.get('/leaderboard', async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT pseudo, avatar, score, correct FROM players ORDER BY score DESC LIMIT 10'
-    )
-    res.json(result.rows)
+    res.json(await fetchTopPlayers())
   } catch (err) {
     console.error('❌ GET /leaderboard error:', err.message)
     res.status(500).json({ error: err.message })

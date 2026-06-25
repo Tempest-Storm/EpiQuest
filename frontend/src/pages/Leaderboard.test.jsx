@@ -1,11 +1,16 @@
 import { test, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 // Leaderboard opens a Socket.io connection at module load; stub it so no real
-// network connection is attempted during tests.
+// network connection is attempted during tests. Captured handlers let tests
+// drive the 'leaderboard:update' event.
+const socketHandlers = {}
 vi.mock('socket.io-client', () => ({
-  io: () => ({ on: vi.fn(), off: vi.fn() }),
+  io: () => ({
+    on: (event, cb) => { socketHandlers[event] = cb },
+    off: vi.fn(),
+  }),
 }))
 
 import Leaderboard from './Leaderboard.jsx'
@@ -56,6 +61,34 @@ test('shows an empty state when there are no scores', async () => {
   )
   renderLeaderboard()
   expect(await screen.findByText(/aucun score encore/i)).toBeInTheDocument()
+})
+
+test('updates from the socket event payload without re-fetching', async () => {
+  renderLeaderboard()
+  await screen.findByText('Alice')
+  globalThis.fetch.mockClear()
+
+  const updated = [{ pseudo: 'Carol', avatar: '', score: 999, correct: 9 }]
+  await act(async () => {
+    socketHandlers['leaderboard:update'](updated)
+  })
+
+  expect(await screen.findByText('Carol')).toBeInTheDocument()
+  expect(screen.getByText('999 pts')).toBeInTheDocument()
+  // The payload is used directly — no extra fetch.
+  expect(globalThis.fetch).not.toHaveBeenCalled()
+})
+
+test('falls back to fetching when the socket event has no payload', async () => {
+  renderLeaderboard()
+  await screen.findByText('Alice')
+  globalThis.fetch.mockClear()
+
+  await act(async () => {
+    socketHandlers['leaderboard:update'](undefined)
+  })
+
+  expect(globalThis.fetch).toHaveBeenCalledTimes(1)
 })
 
 test('tolerates a non-array leaderboard response without crashing', async () => {
