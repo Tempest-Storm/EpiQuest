@@ -102,6 +102,7 @@ TOGBE Naofal
 OROUNLA Sèdjro
 ONAMBELE Charly-Luck
 ALAO OLAIFE
+Kimberly DEGNON — Assistante Frontend Engineer
 
 ---
 
