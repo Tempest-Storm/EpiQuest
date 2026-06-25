@@ -188,7 +188,7 @@ app.get('/auth/google/callback',
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
       )
-      res.redirect(`${process.env.FRONTEND_URL}/quiz?token=${token}`)
+      res.redirect(`${process.env.FRONTEND_URL}/games?token=${token}`)
     })(req, res, next)
   }
 )

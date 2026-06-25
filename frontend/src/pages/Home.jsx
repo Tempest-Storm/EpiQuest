@@ -21,7 +21,7 @@ export default function Home() {
         {/* Body */}
         <div className="p-5 flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-3">
-            {[['12', 'questions'], ['5 min', 'durée']].map(([num, lbl]) => (
+            {[['2', 'jeux'], ['live', 'classement']].map(([num, lbl]) => (
               <div key={lbl} className="bg-gray-50 rounded-xl p-3 text-center">
                 <p className="text-xl font-bold text-gray-800">{num}</p>
                 <p className="text-xs text-gray-400 mt-0.5">{lbl}</p>
@@ -32,7 +32,7 @@ export default function Home() {
           <div className="bg-gray-50 rounded-xl p-4 text-center">
             <p className="text-xs text-gray-400 mb-1">Comment ça marche ?</p>
             <p className="text-sm text-gray-600 leading-relaxed">
-              Connecte-toi avec Google, réponds aux questions sur Epitech et grimpe dans le classement !
+              Connecte-toi avec Google, choisis un jeu — Quiz ou Mémoire — et grimpe dans le classement en temps réel !
             </p>
           </div>
 

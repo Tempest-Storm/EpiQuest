@@ -1,36 +1,47 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { io } from 'socket.io-client'
 import { API } from '../config'
 
 const socket = io(API)
 
+// Per-game display: heading and the label for the `correct` column.
+const GAME_META = {
+  quiz: { title: 'Quiz Epitech', unit: 'correct', route: '/quiz' },
+  memory: { title: 'Mémoire Epitech', unit: 'paires', route: '/memory' },
+}
+
 export default function Leaderboard() {
   const [scores, setScores] = useState([])
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const game = GAME_META[searchParams.get('game')] ? searchParams.get('game') : 'quiz'
+  const meta = GAME_META[game]
+
   const result = JSON.parse(localStorage.getItem('result') || '{}')
   const player = JSON.parse(localStorage.getItem('player') || '{}')
-
-  const fetchLeaderboard = () => {
-    fetch(`${API}/leaderboard`)
-      .then(r => r.json())
-      .then(data => {
-        if (Array.isArray(data)) setScores(data)
-      })
-      .catch(err => console.error('Failed to load leaderboard:', err))
-  }
+  const showRecap = result.pseudo && result.game === game
 
   useEffect(() => {
+    const fetchLeaderboard = () => {
+      fetch(`${API}/leaderboard?game=${game}`)
+        .then(r => r.json())
+        .then(data => { if (Array.isArray(data)) setScores(data) })
+        .catch(err => console.error('Failed to load leaderboard:', err))
+    }
+
     fetchLeaderboard()
-    // The server pushes the updated standings with the event payload; only
-    // fall back to a fetch if it is missing.
-    const onUpdate = (rows) => {
-      if (Array.isArray(rows)) setScores(rows)
+    // The server pushes the updated standings for a game with the event
+    // payload; ignore events for other games and fall back to a fetch only if
+    // the payload is missing or malformed.
+    const onUpdate = (payload) => {
+      if (!payload || payload.game !== game) return
+      if (Array.isArray(payload.rows)) setScores(payload.rows)
       else fetchLeaderboard()
     }
     socket.on('leaderboard:update', onUpdate)
     return () => socket.off('leaderboard:update', onUpdate)
-  }, [])
+  }, [game])
 
   const medals = ['🥇', '🥈', '🥉']
 
@@ -39,19 +50,19 @@ export default function Leaderboard() {
       <div className="w-full max-w-sm bg-white rounded-3xl overflow-hidden shadow-xl">
 
         <div className="bg-[#1A1A2E] px-6 py-5 text-center">
-          <h1 className="text-white text-lg font-bold">Classement live</h1>
+          <h1 className="text-white text-lg font-bold">Classement — {meta.title}</h1>
           <p className="text-white/30 text-xs mt-1">🟢 Mis à jour en temps réel</p>
         </div>
 
         {/* My score recap */}
-        {result.pseudo && (
+        {showRecap && (
           <div className="bg-indigo-50 px-4 py-3 flex items-center gap-3 border-b border-indigo-100">
             {result.avatar && (
               <img src={result.avatar} className="w-8 h-8 rounded-full" alt="avatar" />
             )}
             <div className="flex-1">
               <p className="text-xs font-semibold text-indigo-700">{result.pseudo}</p>
-              <p className="text-xs text-indigo-400">{result.correct}/{result.total} correct</p>
+              <p className="text-xs text-indigo-400">{result.correct}/{result.total} {meta.unit}</p>
             </div>
             <span className="text-indigo-600 font-bold text-sm">{result.score} pts</span>
           </div>
@@ -80,7 +91,7 @@ export default function Leaderboard() {
                   <p className={`text-sm font-semibold truncate ${isMe ? 'text-indigo-700' : 'text-gray-800'}`}>
                     {p.pseudo}
                   </p>
-                  <p className="text-xs text-gray-400">{p.correct} correct</p>
+                  <p className="text-xs text-gray-400">{p.correct} {meta.unit}</p>
                 </div>
                 <span className={`text-sm font-bold flex-shrink-0 ${isMe ? 'text-indigo-600' : 'text-gray-700'}`}>
                   {p.score} pts
@@ -90,16 +101,16 @@ export default function Leaderboard() {
           })}
 
           <button
-            onClick={() => navigate('/quiz')}
+            onClick={() => navigate(meta.route)}
             className="mt-2 w-full bg-indigo-600 text-white font-semibold py-4 rounded-2xl text-sm"
           >
             ↺ Rejouer
           </button>
           <button
-            onClick={() => { localStorage.removeItem('token'); navigate('/') }}
-            className="w-full bg-gray-100 text-gray-500 font-medium py-3 rounded-2xl text-sm"
+            onClick={() => navigate('/games')}
+            className="w-full bg-gray-100 text-gray-700 font-medium py-3 rounded-2xl text-sm"
           >
-            Se déconnecter
+            🎮 Autres jeux
           </button>
         </div>
       </div>

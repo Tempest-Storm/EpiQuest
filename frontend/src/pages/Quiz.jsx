@@ -1,28 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { API } from '../config'
 import { computeScore, MAX_TIME } from '../lib/score'
-
-// Safely decode the payload of a JWT without verifying its signature.
-// Returns null for anything malformed so callers can redirect to login
-// instead of crashing the whole page.
-function decodeToken(t) {
-  try {
-    return JSON.parse(atob(t.split('.')[1]))
-  } catch {
-    return null
-  }
-}
+import { useAuth } from '../hooks/useAuth'
 
 export default function Quiz() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-
-  // The token may arrive in the URL (fresh login) or already be in
-  // localStorage (returning player). Resolve it and the decoded user once,
-  // synchronously, on first render.
-  const [token] = useState(() => searchParams.get('token') || localStorage.getItem('token'))
-  const [user] = useState(() => (token ? decodeToken(token) : null))
+  const { user, token } = useAuth()
 
   const [questions, setQuestions] = useState([])
   const [current, setCurrent] = useState(0)
@@ -33,18 +17,6 @@ export default function Quiz() {
   const [answered, setAnswered] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
-
-  // Persist the session for returning players, or bounce to login if there
-  // is no valid token.
-  useEffect(() => {
-    if (!user) {
-      localStorage.removeItem('token')
-      navigate('/')
-      return
-    }
-    localStorage.setItem('token', token)
-    localStorage.setItem('player', JSON.stringify({ pseudo: user.name, avatar: user.avatar_url }))
-  }, [user, token, navigate])
 
   // Load the questions once the player is authenticated.
   useEffect(() => {
@@ -70,6 +42,7 @@ export default function Quiz() {
       // Store the local recap first so the player always sees their result,
       // even if persisting the score to the server fails.
       localStorage.setItem('result', JSON.stringify({
+        game: 'quiz',
         pseudo: user?.name,
         avatar: user?.avatar_url,
         score: finalScore,
@@ -79,11 +52,11 @@ export default function Quiz() {
       fetch(`${API}/players`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ score: finalScore, correct: finalCorrect })
+        body: JSON.stringify({ score: finalScore, correct: finalCorrect, game: 'quiz' })
       })
         .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`) })
         .catch(err => console.error('Failed to save score:', err))
-        .finally(() => navigate('/leaderboard'))
+        .finally(() => navigate('/leaderboard?game=quiz'))
     } else {
       setCurrent(c => c + 1)
       setSelected(null)

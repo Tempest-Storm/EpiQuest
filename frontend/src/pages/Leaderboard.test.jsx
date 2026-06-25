@@ -47,12 +47,21 @@ test('renders the fetched scores ranked', async () => {
   expect(screen.getByText('200 pts')).toBeInTheDocument()
 })
 
-test('shows the personal recap from localStorage', async () => {
+test('shows the personal recap from localStorage for the current game', async () => {
   localStorage.setItem('result', JSON.stringify({
-    pseudo: 'Alice', avatar: '', score: 300, correct: 3, total: 5,
+    game: 'quiz', pseudo: 'Alice', avatar: '', score: 300, correct: 3, total: 5,
   }))
   renderLeaderboard()
   expect(await screen.findByText('3/5 correct')).toBeInTheDocument()
+})
+
+test('hides the recap when it belongs to a different game', async () => {
+  localStorage.setItem('result', JSON.stringify({
+    game: 'memory', pseudo: 'Alice', avatar: '', score: 300, correct: 6, total: 6,
+  }))
+  renderLeaderboard() // defaults to the quiz board
+  await screen.findByText('Alice') // from the leaderboard rows
+  expect(screen.queryByText('6/6 paires')).not.toBeInTheDocument()
 })
 
 test('shows an empty state when there are no scores', async () => {
@@ -70,7 +79,7 @@ test('updates from the socket event payload without re-fetching', async () => {
 
   const updated = [{ pseudo: 'Carol', avatar: '', score: 999, correct: 9 }]
   await act(async () => {
-    socketHandlers['leaderboard:update'](updated)
+    socketHandlers['leaderboard:update']({ game: 'quiz', rows: updated })
   })
 
   expect(await screen.findByText('Carol')).toBeInTheDocument()
@@ -79,13 +88,26 @@ test('updates from the socket event payload without re-fetching', async () => {
   expect(globalThis.fetch).not.toHaveBeenCalled()
 })
 
-test('falls back to fetching when the socket event has no payload', async () => {
+test('ignores socket updates for a different game', async () => {
+  renderLeaderboard() // quiz board
+  await screen.findByText('Alice')
+  globalThis.fetch.mockClear()
+
+  await act(async () => {
+    socketHandlers['leaderboard:update']({ game: 'memory', rows: [{ pseudo: 'Carol', avatar: '', score: 999, correct: 6 }] })
+  })
+
+  expect(screen.queryByText('Carol')).not.toBeInTheDocument()
+  expect(globalThis.fetch).not.toHaveBeenCalled()
+})
+
+test('falls back to fetching when the event payload has no rows', async () => {
   renderLeaderboard()
   await screen.findByText('Alice')
   globalThis.fetch.mockClear()
 
   await act(async () => {
-    socketHandlers['leaderboard:update'](undefined)
+    socketHandlers['leaderboard:update']({ game: 'quiz' })
   })
 
   expect(globalThis.fetch).toHaveBeenCalledTimes(1)
