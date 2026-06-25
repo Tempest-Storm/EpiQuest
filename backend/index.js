@@ -9,7 +9,7 @@ const jwt = require('jsonwebtoken')
 const session = require('express-session')
 const { authMiddleware } = require('./auth')
 const { assertEnv } = require('./config')
-const { isPlausibleScore } = require('./scoreGuard')
+const { isValidGame, isPlausibleScore, isPlausibleMemoryScore } = require('./scoreGuard')
 require('dotenv').config()
 
 // Fail fast with a clear message if the server is misconfigured.
@@ -68,16 +68,46 @@ async function initDatabase() {
         user_id INTEGER REFERENCES users(id),
         pseudo VARCHAR(100) NOT NULL,
         avatar TEXT,
+        game VARCHAR(20) NOT NULL DEFAULT 'quiz',
         score INTEGER NOT NULL DEFAULT 0,
         correct INTEGER NOT NULL DEFAULT 0,
         created_at TIMESTAMP DEFAULT NOW()
       )
     `)
 
-    // For pre-existing player tables created before user_id was introduced.
+    // For pre-existing player tables created before these columns existed.
     await client.query('ALTER TABLE players ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)')
-    // The POST /players upsert uses ON CONFLICT (user_id); a unique index is required.
-    await client.query('CREATE UNIQUE INDEX IF NOT EXISTS players_user_id_key ON players(user_id)')
+    await client.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS game VARCHAR(20) NOT NULL DEFAULT 'quiz'")
+    // Widen columns that older/manual schemas under-sized. Google avatar URLs
+    // and display names are long; a narrow VARCHAR rejected real inserts with
+    // "value too long". Widening is a safe, idempotent no-op once applied.
+    await client.query('ALTER TABLE players ALTER COLUMN avatar TYPE TEXT')
+    await client.query('ALTER TABLE players ALTER COLUMN pseudo TYPE VARCHAR(100)')
+
+    // A player now keeps one best score per game (ON CONFLICT (user_id, game)),
+    // so any legacy single-column UNIQUE(user_id) constraint/index must go —
+    // it would block a user from having a row per game. The name varies across
+    // environments (players_user_id_key, players_user_id_unique, ...), so drop
+    // whichever UNIQUE constraint is defined on exactly (user_id).
+    await client.query(`
+      DO $$
+      DECLARE c record;
+      BEGIN
+        FOR c IN
+          SELECT conname FROM pg_constraint
+          WHERE conrelid = 'players'::regclass
+            AND contype = 'u'
+            AND conkey = ARRAY[(
+              SELECT attnum FROM pg_attribute
+              WHERE attrelid = 'players'::regclass AND attname = 'user_id'
+            )]::smallint[]
+        LOOP
+          EXECUTE format('ALTER TABLE players DROP CONSTRAINT %I', c.conname);
+        END LOOP;
+      END $$;
+    `)
+    await client.query('DROP INDEX IF EXISTS players_user_id_key')
+    await client.query('CREATE UNIQUE INDEX IF NOT EXISTS players_user_game_key ON players(user_id, game)')
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS questions (
@@ -187,9 +217,12 @@ app.get('/questions', async (req, res) => {
 })
 
 app.post('/players', authMiddleware, async (req, res) => {
-  const { score, correct } = req.body
+  const { score, correct, game = 'quiz' } = req.body
   const { id, name, avatar_url } = req.user
 
+  if (!isValidGame(game)) {
+    return res.status(400).json({ error: 'unknown game' })
+  }
   // Reject anything that isn't a sane, non-negative integer.
   const isValid = (n) => Number.isInteger(n) && n >= 0
   if (!isValid(score) || !isValid(correct)) {
@@ -198,29 +231,35 @@ app.post('/players', authMiddleware, async (req, res) => {
 
   try {
     // Scoring is computed client-side, so guard against spoofed submissions.
-    const { rows: [{ count }] } = await pool.query('SELECT COUNT(*)::int AS count FROM questions')
-    if (!isPlausibleScore(score, correct, count)) {
+    let plausible
+    if (game === 'quiz') {
+      const { rows: [{ count }] } = await pool.query('SELECT COUNT(*)::int AS count FROM questions')
+      plausible = isPlausibleScore(score, correct, count)
+    } else {
+      plausible = isPlausibleMemoryScore(score, correct)
+    }
+    if (!plausible) {
       return res.status(400).json({ error: 'Submitted score is not plausible' })
     }
 
-    // Upsert — keep the player's best score. correct and created_at are
-    // only updated when this run beats the stored score, so they always
-    // describe the same run as the score that is kept.
+    // Upsert — keep the player's best score for this game. correct and
+    // created_at are only updated when this run beats the stored score, so
+    // they always describe the same run as the score that is kept.
     const result = await pool.query(`
-      INSERT INTO players (user_id, pseudo, avatar, score, correct)
-      VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (user_id)
+      INSERT INTO players (user_id, pseudo, avatar, game, score, correct)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (user_id, game)
       DO UPDATE SET
         score = GREATEST(players.score, EXCLUDED.score),
         correct = CASE WHEN EXCLUDED.score > players.score THEN EXCLUDED.correct ELSE players.correct END,
         created_at = CASE WHEN EXCLUDED.score > players.score THEN NOW() ELSE players.created_at END
       RETURNING *
-    `, [id, name, avatar_url, score, correct])
-    // Push the new standings to every client in a single query, instead of
-    // signalling each client to re-fetch /leaderboard (which scaled as
-    // submissions × connected clients). Clients fall back to fetching if the
+    `, [id, name, avatar_url, game, score, correct])
+    // Push the new standings for this game to every client in a single query,
+    // instead of signalling each client to re-fetch /leaderboard (which scaled
+    // as submissions × connected clients). Clients fall back to fetching if the
     // payload is ever missing.
-    io.emit('leaderboard:update', await fetchTopPlayers())
+    io.emit('leaderboard:update', { game, rows: await fetchTopPlayers(game) })
     res.json(result.rows[0])
   } catch (err) {
     console.error('❌ POST /players error:', err.message)
@@ -228,17 +267,22 @@ app.post('/players', authMiddleware, async (req, res) => {
   }
 })
 
-// Top 10 players by score — the shape the leaderboard renders.
-async function fetchTopPlayers() {
+// Top 10 players by score for a given game — the shape the leaderboard renders.
+async function fetchTopPlayers(game = 'quiz') {
   const result = await pool.query(
-    'SELECT pseudo, avatar, score, correct FROM players ORDER BY score DESC LIMIT 10'
+    'SELECT pseudo, avatar, score, correct FROM players WHERE game = $1 ORDER BY score DESC LIMIT 10',
+    [game]
   )
   return result.rows
 }
 
 app.get('/leaderboard', async (req, res) => {
+  const game = req.query.game || 'quiz'
+  if (!isValidGame(game)) {
+    return res.status(400).json({ error: 'unknown game' })
+  }
   try {
-    res.json(await fetchTopPlayers())
+    res.json(await fetchTopPlayers(game))
   } catch (err) {
     console.error('❌ GET /leaderboard error:', err.message)
     res.status(500).json({ error: err.message })

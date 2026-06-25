@@ -14,17 +14,22 @@ CREATE TABLE IF NOT EXISTS users (
   created_at  TIMESTAMP DEFAULT NOW()
 );
 
--- One score row per user. The upsert in POST /players relies on the
--- UNIQUE constraint on user_id (ON CONFLICT (user_id)).
+-- One best-score row per (user, game). The upsert in POST /players relies on
+-- the UNIQUE (user_id, game) index below (ON CONFLICT (user_id, game)).
+-- `game` is e.g. 'quiz' or 'memory'; `correct` is game-specific (correct
+-- answers for the quiz, matched pairs for memory).
 CREATE TABLE IF NOT EXISTS players (
   id          SERIAL PRIMARY KEY,
-  user_id     INTEGER UNIQUE REFERENCES users(id),
+  user_id     INTEGER REFERENCES users(id),
   pseudo      VARCHAR(100) NOT NULL,
   avatar      TEXT,
+  game        VARCHAR(20) NOT NULL DEFAULT 'quiz',
   score       INTEGER NOT NULL DEFAULT 0,
   correct     INTEGER NOT NULL DEFAULT 0,
   created_at  TIMESTAMP DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS players_user_game_key ON players(user_id, game);
 
 -- Quiz questions. `options` is a JSON array of strings; `answer` is the
 -- zero-based index into that array of the correct option.
