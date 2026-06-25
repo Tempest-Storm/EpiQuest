@@ -22,6 +22,10 @@ try {
 }
 
 const app = express()
+// Behind a hosting proxy (Render, etc.) trust X-Forwarded-* so req.protocol
+// is https — otherwise Passport builds an http OAuth callback that Google,
+// configured with an https redirect URI, rejects.
+app.set('trust proxy', 1)
 const server = http.createServer(app)
 const io = new Server(server, { cors: { origin: process.env.FRONTEND_URL, credentials: true } })
 
@@ -148,7 +152,10 @@ async function seedQuestionsIfEmpty() {
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  callbackURL: '/auth/google/callback'
+  // Relative by default (works locally); set GOOGLE_CALLBACK_URL to the full
+  // public URL in production so it exactly matches the URI registered in the
+  // Google Cloud console, e.g. https://epiquest-api.onrender.com/auth/google/callback
+  callbackURL: process.env.GOOGLE_CALLBACK_URL || '/auth/google/callback'
 }, async (accessToken, refreshToken, profile, done) => {
   try {
     const existing = await pool.query('SELECT * FROM users WHERE google_id = $1', [profile.id])

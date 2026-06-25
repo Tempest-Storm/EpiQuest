@@ -28,6 +28,10 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
+      # Set to https://<your-render-service>.onrender.com/auth/google/callback
+      # once Render assigns the service URL (must match the Google console).
+      - key: GOOGLE_CALLBACK_URL
+        sync: false
 
 databases:
   - name: epiquest-db
