@@ -9,7 +9,7 @@ const jwt = require('jsonwebtoken')
 const session = require('express-session')
 const { authMiddleware } = require('./auth')
 const { assertEnv } = require('./config')
-const { isValidGame, isPlausibleScore, isPlausibleMemoryScore } = require('./scoreGuard')
+const { isValidGame, isPlausibleScore, isPlausibleMemoryScore, isPlausibleCodeScore } = require('./scoreGuard')
 require('dotenv').config()
 
 // Fail fast with a clear message if the server is misconfigured.
@@ -122,9 +122,24 @@ async function initDatabase() {
       )
     `)
 
+    // Normalize a legacy text[] options column to jsonb (some manually-created
+    // schemas used text[]). to_jsonb converts existing arrays without data
+    // loss; it's a no-op when the column is already jsonb.
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'questions' AND column_name = 'options' AND data_type <> 'jsonb'
+        ) THEN
+          ALTER TABLE questions ALTER COLUMN options TYPE jsonb USING to_jsonb(options);
+        END IF;
+      END $$;
+    `)
+
     await client.query('COMMIT')
 
-    await seedQuestionsIfEmpty()
+    await seedMissingQuestions()
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {})
     console.error('❌ DB initialization failed:', err.message)
@@ -134,18 +149,22 @@ async function initDatabase() {
   }
 }
 
-// Populate the questions table with the default Epitech quiz the first time
-// the app runs against an empty database. Existing questions are never touched.
-async function seedQuestionsIfEmpty() {
-  const { rows } = await pool.query('SELECT COUNT(*)::int AS count FROM questions')
-  if (rows[0].count > 0) return
+// Ensure every default question is present, inserting only the ones missing
+// (matched by question text). This keeps the pool in sync as new questions are
+// added over time, without duplicating existing rows or clobbering any that an
+// admin may have added or edited.
+async function seedMissingQuestions() {
+  let inserted = 0
   for (const q of seedQuestions) {
-    await pool.query(
-      'INSERT INTO questions (question, options, answer) VALUES ($1, $2, $3)',
+    const res = await pool.query(
+      `INSERT INTO questions (question, options, answer)
+       SELECT $1, $2, $3
+       WHERE NOT EXISTS (SELECT 1 FROM questions WHERE question = $1)`,
       [q.question, JSON.stringify(q.options), q.answer]
     )
+    inserted += res.rowCount
   }
-  console.log(`🌱 Seeded ${seedQuestions.length} default questions`)
+  if (inserted > 0) console.log(`🌱 Seeded ${inserted} new question(s)`)
 }
 
 // ── PASSPORT ──────────────────────────────────────────────────
@@ -214,9 +233,16 @@ app.get('/health', async (req, res) => {
 })
 
 // ── GAME ROUTES ───────────────────────────────────────────────
+// Returns quiz questions. With ?limit=N, returns a random N from the pool
+// (so a larger pool gives variety without lengthening each game); otherwise
+// returns them all in id order.
 app.get('/questions', async (req, res) => {
+  const rawLimit = parseInt(req.query.limit, 10)
+  const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : null
   try {
-    const result = await pool.query('SELECT * FROM questions ORDER BY id')
+    const result = limit
+      ? await pool.query('SELECT * FROM questions ORDER BY RANDOM() LIMIT $1', [limit])
+      : await pool.query('SELECT * FROM questions ORDER BY id')
     res.json(result.rows)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -242,6 +268,8 @@ app.post('/players', authMiddleware, async (req, res) => {
     if (game === 'quiz') {
       const { rows: [{ count }] } = await pool.query('SELECT COUNT(*)::int AS count FROM questions')
       plausible = isPlausibleScore(score, correct, count)
+    } else if (game === 'code') {
+      plausible = isPlausibleCodeScore(score, correct)
     } else {
       plausible = isPlausibleMemoryScore(score, correct)
     }

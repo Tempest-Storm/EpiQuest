@@ -7,6 +7,9 @@ const {
   isPlausibleMemoryScore,
   MEMORY_PAIRS,
   MAX_MEMORY_SCORE,
+  isPlausibleCodeScore,
+  CODE_ROUNDS,
+  MAX_CODE_SCORE,
 } = require('../scoreGuard')
 
 const TOTAL = 12
@@ -39,8 +42,25 @@ test('rejects an inflated score with zero correct answers', () => {
 test('isValidGame only accepts known games', () => {
   assert.equal(isValidGame('quiz'), true)
   assert.equal(isValidGame('memory'), true)
+  assert.equal(isValidGame('code'), true)
   assert.equal(isValidGame('snake'), false)
   assert.equal(isValidGame(undefined), false)
+})
+
+test('code: accepts a realistic submission', () => {
+  assert.equal(isPlausibleCodeScore(700, 3), true)
+})
+
+test('code: accepts the exact maximum score with all rounds solved', () => {
+  assert.equal(isPlausibleCodeScore(MAX_CODE_SCORE, CODE_ROUNDS), true)
+})
+
+test('code: rejects more solved rounds than exist', () => {
+  assert.equal(isPlausibleCodeScore(0, CODE_ROUNDS + 1), false)
+})
+
+test('code: rejects a score above the maximum', () => {
+  assert.equal(isPlausibleCodeScore(MAX_CODE_SCORE + 1, CODE_ROUNDS), false)
 })
 
 test('memory: accepts a realistic submission', () => {

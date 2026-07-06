@@ -1,6 +1,6 @@
 // The games that can submit scores. Used to validate the `game` field and to
 // scope each player's best score per game.
-const GAMES = ['quiz', 'memory']
+const GAMES = ['quiz', 'memory', 'code']
 
 function isValidGame(game) {
   return GAMES.includes(game)
@@ -35,6 +35,21 @@ function isPlausibleMemoryScore(score, correct, pairs = MEMORY_PAIRS, maxScore =
   return true
 }
 
+// ── Code dans l'ordre ─────────────────────────────────────────
+// A game is CODE_ROUNDS snippets; the client scoring formula
+// (frontend/src/lib/codeScore.js) caps each round at 300, so the run caps at
+// CODE_ROUNDS * 300.
+const CODE_ROUNDS = 4
+const MAX_CODE_SCORE = CODE_ROUNDS * 300 // 1200
+
+// `correct` here is the number of snippets ordered perfectly. A run cannot
+// solve more snippets than there are rounds, nor exceed the maximum score.
+function isPlausibleCodeScore(score, correct, rounds = CODE_ROUNDS, maxScore = MAX_CODE_SCORE) {
+  if (correct > rounds) return false
+  if (score > maxScore) return false
+  return true
+}
+
 module.exports = {
   GAMES,
   isValidGame,
@@ -43,4 +58,7 @@ module.exports = {
   MEMORY_PAIRS,
   MAX_MEMORY_SCORE,
   isPlausibleMemoryScore,
+  CODE_ROUNDS,
+  MAX_CODE_SCORE,
+  isPlausibleCodeScore,
 }
