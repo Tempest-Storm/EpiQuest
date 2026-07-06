@@ -22,7 +22,13 @@ export function useAuth() {
     }
     localStorage.setItem('token', token)
     localStorage.setItem('player', JSON.stringify({ pseudo: user.name, avatar: user.avatar_url }))
-  }, [user, token, navigate])
+    // Scrub the token from the address bar once consumed: URLs end up in
+    // browser history, server access logs and screenshots — a 24h JWT
+    // shouldn't linger there.
+    if (searchParams.has('token')) {
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+  }, [user, token, navigate, searchParams])
 
   return { user, token }
 }

@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Never leak our URLs (which briefly carry the login token) to third
+         parties such as the Google avatar CDN. -->
+    <meta name="referrer" content="no-referrer" />
     <meta name="description" content="EpiQuest — les mini-jeux interactifs des Journées Portes Ouvertes d'Epitech." />
     <meta name="theme-color" content="#1A1A2E" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

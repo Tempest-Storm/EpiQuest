@@ -6,7 +6,8 @@ const { Pool } = require('pg')
 const passport = require('passport')
 const GoogleStrategy = require('passport-google-oauth20').Strategy
 const jwt = require('jsonwebtoken')
-const session = require('express-session')
+const helmet = require('helmet')
+const rateLimit = require('express-rate-limit')
 const { authMiddleware } = require('./auth')
 const { assertEnv } = require('./config')
 const { isValidGame, isPlausibleScore, isPlausibleMemoryScore, isPlausibleCodeScore } = require('./scoreGuard')
@@ -29,15 +30,19 @@ app.set('trust proxy', 1)
 const server = http.createServer(app)
 const io = new Server(server, { cors: { origin: process.env.FRONTEND_URL, credentials: true } })
 
+// Standard security headers (HSTS, nosniff, frame denial, ...). This API only
+// serves JSON and OAuth redirects, so the defaults are safe.
+app.use(helmet())
 app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }))
 app.use(express.json())
-app.use(session({
-  secret: process.env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false
-}))
+// Auth is stateless (JWT): passport is used purely to run the Google OAuth
+// dance, so no session middleware — one less stateful attack surface.
 app.use(passport.initialize())
-app.use(passport.session())
+
+// Throttle abuse-prone routes. Kept per-IP and generous enough for a busy
+// JPO stand where many phones can share one NAT/Wi-Fi egress IP.
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: true, legacyHeaders: false })
+const writeLimiter = rateLimit({ windowMs: 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false })
 
 const seedQuestions = require('./seedQuestions')
 
@@ -189,24 +194,15 @@ passport.use(new GoogleStrategy({
   }
 }))
 
-passport.serializeUser((user, done) => done(null, user.id))
-passport.deserializeUser(async (id, done) => {
-  try {
-    const result = await pool.query('SELECT * FROM users WHERE id = $1', [id])
-    done(null, result.rows[0])
-  } catch (err) {
-    done(err)
-  }
-})
-
 // ── AUTH ROUTES ───────────────────────────────────────────────
-app.get('/auth/google',
-  passport.authenticate('google', { scope: ['profile', 'email'] })
+// session: false — auth is stateless; the callback issues a JWT directly.
+app.get('/auth/google', authLimiter,
+  passport.authenticate('google', { scope: ['profile', 'email'], session: false })
 )
 
-app.get('/auth/google/callback',
+app.get('/auth/google/callback', authLimiter,
   (req, res, next) => {
-    passport.authenticate('google', { failureRedirect: `${process.env.FRONTEND_URL}?error=auth` }, (err, user, info) => {
+    passport.authenticate('google', { session: false, failureRedirect: `${process.env.FRONTEND_URL}?error=auth` }, (err, user, info) => {
       if (err) { console.error('❌ Auth error:', err); return res.redirect(`${process.env.FRONTEND_URL}?error=auth`) }
       if (!user) { console.error('❌ No user:', info); return res.redirect(`${process.env.FRONTEND_URL}?error=auth`) }
       const token = jwt.sign(
@@ -245,11 +241,12 @@ app.get('/questions', async (req, res) => {
       : await pool.query('SELECT * FROM questions ORDER BY id')
     res.json(result.rows)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('❌ GET /questions error:', err.message)
+    res.status(500).json({ error: 'Internal server error' })
   }
 })
 
-app.post('/players', authMiddleware, async (req, res) => {
+app.post('/players', writeLimiter, authMiddleware, async (req, res) => {
   const { score, correct, game = 'quiz' } = req.body
   const { id, name, avatar_url } = req.user
 
@@ -298,7 +295,7 @@ app.post('/players', authMiddleware, async (req, res) => {
     res.json(result.rows[0])
   } catch (err) {
     console.error('❌ POST /players error:', err.message)
-    res.status(500).json({ error: err.message })
+    res.status(500).json({ error: 'Internal server error' })
   }
 })
 
@@ -320,7 +317,7 @@ app.get('/leaderboard', async (req, res) => {
     res.json(await fetchTopPlayers(game))
   } catch (err) {
     console.error('❌ GET /leaderboard error:', err.message)
-    res.status(500).json({ error: err.message })
+    res.status(500).json({ error: 'Internal server error' })
   }
 })
 
@@ -343,7 +340,7 @@ app.get('/players/me', authMiddleware, async (req, res) => {
     res.json(rows[0] || null)
   } catch (err) {
     console.error('❌ GET /players/me error:', err.message)
-    res.status(500).json({ error: err.message })
+    res.status(500).json({ error: 'Internal server error' })
   }
 })
 
@@ -363,7 +360,7 @@ app.get('/players/me/all', authMiddleware, async (req, res) => {
     res.json(byGame)
   } catch (err) {
     console.error('❌ GET /players/me/all error:', err.message)
-    res.status(500).json({ error: err.message })
+    res.status(500).json({ error: 'Internal server error' })
   }
 })
 

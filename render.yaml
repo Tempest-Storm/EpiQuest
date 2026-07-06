@@ -21,8 +21,6 @@ services:
         value: https://epiquest.vercel.app
       - key: JWT_SECRET
         generateValue: true
-      - key: SESSION_SECRET
-        generateValue: true
       # Set these in the Render dashboard (do not commit secrets):
       - key: GOOGLE_CLIENT_ID
         sync: false
