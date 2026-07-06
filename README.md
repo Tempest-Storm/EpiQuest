@@ -6,21 +6,25 @@
 ![Tek](https://img.shields.io/badge/Epitech-Tek2-blue)
 ![Type](https://img.shields.io/badge/type-Projet%20Libre-purple)
 
+🔗 **Démo en ligne : [epiquest.vercel.app](https://epiquest.vercel.app)**
+
 ---
 
 ## 🎯 C'est quoi ?
 
-EpiQuest est une web app qui permet aux visiteurs d'une JPO Epitech de découvrir l'école de façon ludique. Ils scannent un QR code affiché sur le stand, jouent un quiz sur Epitech, et s'affrontent sur un leaderboard en temps réel — sans aucune installation.
+EpiQuest est une web app qui permet aux visiteurs d'une JPO Epitech de découvrir l'école de façon ludique. Ils scannent un QR code affiché sur le stand, jouent à des mini-jeux sur Epitech, et s'affrontent sur un leaderboard en temps réel — sans aucune installation.
 
 ---
 
 ## ✨ Fonctionnalités
 
 - 📱 **Accès par QR code** — aucune installation, fonctionne sur tous les smartphones
-- 🧠 **Quiz Epitech** — questions sur la pédagogie, l'histoire et la vie étudiante
-- 🏆 **Leaderboard live** — classement mis à jour en temps réel via WebSocket
-- 🎭 **Profil joueur** — pseudo + avatar personnalisé
-- 🔧 **Dashboard admin** — gestion des questions sans toucher au code
+- 🔐 **Connexion Google** — profil joueur (pseudo + avatar) en un clic
+- 🎮 **Trois jeux** partageant le même compte et un leaderboard par jeu :
+  - 🧠 **Quiz Epitech** — questions sur la pédagogie, l'histoire et la vie étudiante (tirage aléatoire dans un pool)
+  - 🃏 **Mémoire Epitech** — retrouve les paires le plus vite possible
+  - 🧩 **Code dans l'ordre** — remets les lignes d'un extrait de code dans le bon ordre
+- 🏆 **Leaderboard live** — classement par jeu, mis à jour en temps réel via WebSocket
 
 ---
 
@@ -85,13 +89,24 @@ npm run dev
 ```
 EpiQuest/
 ├── frontend/       # React app (Vite + Tailwind)
+│   └── src/
+│       ├── pages/        # Home, Games (hub), Quiz, Memory, CodeOrder, Leaderboard
+│       ├── hooks/        # useAuth (session partagée entre les jeux)
+│       └── lib/          # scoring pur & testable (score, memoryScore, codeScore)
 ├── backend/        # API REST + WebSocket (Express + Socket.io)
 │   ├── index.js          # point d'entrée serveur
 │   ├── auth.js           # middleware d'authentification JWT
-│   ├── seedQuestions.js  # quiz Epitech par défaut
+│   ├── scoreGuard.js     # validation anti-triche des scores par jeu
+│   ├── seedQuestions.js  # pool de questions Epitech par défaut
 │   └── test/             # tests (node --test)
 └── database/       # Schéma SQL de référence
 ```
+
+## ☁️ Déploiement
+
+- **Frontend** → Vercel (config : `frontend/vercel.json`).
+- **Backend + PostgreSQL** → Render (blueprint : `render.yaml`). Vercel ne peut
+  pas héberger le serveur WebSocket persistant ni la base de données.
 
 ---
 
