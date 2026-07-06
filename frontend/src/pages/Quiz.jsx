@@ -21,7 +21,9 @@ export default function Quiz() {
   // Load the questions once the player is authenticated.
   useEffect(() => {
     if (!user) return
-    fetch(`${API}/questions`)
+    // Play a random subset each time so a large pool gives variety without
+    // making any single game drag on.
+    fetch(`${API}/questions?limit=10`)
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
       .then(data => {
         if (!Array.isArray(data)) throw new Error('Unexpected response')

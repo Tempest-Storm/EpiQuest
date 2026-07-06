@@ -28,7 +28,7 @@ function renderQuiz() {
 beforeEach(() => {
   localStorage.clear()
   globalThis.fetch = vi.fn((url) => {
-    if (String(url).endsWith('/questions')) {
+    if (String(url).includes('/questions')) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(QUESTIONS) })
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })

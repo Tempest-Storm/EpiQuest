@@ -19,6 +19,14 @@ const GAMES = [
     desc: 'Retrouve les paires le plus vite possible',
     accent: 'bg-emerald-600',
   },
+  {
+    key: 'code',
+    to: '/code',
+    icon: '🧩',
+    title: 'Code dans l’ordre',
+    desc: 'Remets les lignes de code dans le bon ordre',
+    accent: 'bg-rose-600',
+  },
 ]
 
 export default function Games() {

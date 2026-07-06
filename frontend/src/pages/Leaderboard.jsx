@@ -9,6 +9,7 @@ const socket = io(API)
 const GAME_META = {
   quiz: { title: 'Quiz Epitech', unit: 'correct', route: '/quiz' },
   memory: { title: 'Mémoire Epitech', unit: 'paires', route: '/memory' },
+  code: { title: 'Code dans l’ordre', unit: 'réussis', route: '/code' },
 }
 
 export default function Leaderboard() {
