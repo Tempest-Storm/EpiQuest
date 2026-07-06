@@ -32,8 +32,11 @@ function buildRounds() {
 function Round({ round, roundNumber, onDone }) {
   const [order, setOrder] = useState(() => round.initialOrder)
   const [startTime] = useState(() => Date.now())
+  const [result, setResult] = useState(null) // null until the player validates
+  const checked = result !== null
 
   const move = (i, dir) => {
+    if (checked) return
     const j = i + dir
     if (j < 0 || j >= order.length) return
     const next = [...order]
@@ -45,8 +48,10 @@ function Round({ round, roundNumber, onDone }) {
     const seconds = (Date.now() - startTime) / 1000
     const correct = countCorrect(order, round.solution)
     const perfect = isSolved(order, round.solution)
-    onDone({ score: scoreRound(correct, round.solution.length, seconds, perfect), perfect })
+    setResult({ correct, perfect, score: scoreRound(correct, round.solution.length, seconds, perfect) })
   }
+
+  const isLast = roundNumber === CODE_ROUNDS
 
   return (
     <>
@@ -58,32 +63,60 @@ function Round({ round, roundNumber, onDone }) {
       <div className="p-5 flex flex-col gap-3">
         <p className="text-xs text-gray-400 text-center">Remets les lignes dans le bon ordre 👇</p>
         <div className="flex flex-col gap-2 font-mono text-[13px]">
-          {order.map((line, i) => (
-            <div key={line} className="flex items-center gap-2">
-              <pre className="flex-1 min-w-0 overflow-x-auto bg-gray-900 text-emerald-200 rounded-lg px-3 py-2 whitespace-pre">{line}</pre>
-              <div className="flex flex-col gap-1 flex-shrink-0">
-                <button
-                  onClick={() => move(i, -1)}
-                  disabled={i === 0}
-                  aria-label="monter"
-                  className="w-7 h-6 rounded bg-gray-100 text-gray-600 text-xs disabled:opacity-30"
-                >▲</button>
-                <button
-                  onClick={() => move(i, 1)}
-                  disabled={i === order.length - 1}
-                  aria-label="descendre"
-                  className="w-7 h-6 rounded bg-gray-100 text-gray-600 text-xs disabled:opacity-30"
-                >▼</button>
+          {order.map((line, i) => {
+            // After validation, colour each line by whether it's in the right spot.
+            const lineOk = checked && line === round.solution[i]
+            const codeClass = checked
+              ? lineOk
+                ? 'bg-emerald-900 text-emerald-100 ring-1 ring-emerald-500'
+                : 'bg-rose-950 text-rose-200 ring-1 ring-rose-500'
+              : 'bg-gray-900 text-emerald-200'
+            return (
+              <div key={line} className="flex items-center gap-2">
+                <pre className={`flex-1 min-w-0 overflow-x-auto rounded-lg px-3 py-2 whitespace-pre ${codeClass}`}>{line}</pre>
+                {!checked && (
+                  <div className="flex flex-col gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => move(i, -1)}
+                      disabled={i === 0}
+                      aria-label="monter"
+                      className="w-7 h-6 rounded bg-gray-100 text-gray-600 text-xs disabled:opacity-30"
+                    >▲</button>
+                    <button
+                      onClick={() => move(i, 1)}
+                      disabled={i === order.length - 1}
+                      aria-label="descendre"
+                      className="w-7 h-6 rounded bg-gray-100 text-gray-600 text-xs disabled:opacity-30"
+                    >▼</button>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
-        <button
-          onClick={validate}
-          className="mt-2 w-full bg-indigo-600 text-white font-semibold py-3 rounded-2xl text-sm"
-        >
-          Valider
-        </button>
+
+        {!checked ? (
+          <button
+            onClick={validate}
+            className="mt-2 w-full bg-indigo-600 text-white font-semibold py-3 rounded-2xl text-sm"
+          >
+            Valider
+          </button>
+        ) : (
+          <div className="mt-2 flex flex-col gap-2">
+            <p className={`text-center text-sm font-semibold ${result.perfect ? 'text-emerald-600' : 'text-amber-600'}`}>
+              {result.perfect
+                ? '✅ Parfait !'
+                : `${result.correct}/${round.solution.length} lignes bien placées`}
+            </p>
+            <button
+              onClick={() => onDone({ score: result.score, perfect: result.perfect })}
+              className="w-full bg-indigo-600 text-white font-semibold py-3 rounded-2xl text-sm"
+            >
+              {isLast ? 'Voir mon score' : 'Suivant →'}
+            </button>
+          </div>
+        )}
       </div>
     </>
   )

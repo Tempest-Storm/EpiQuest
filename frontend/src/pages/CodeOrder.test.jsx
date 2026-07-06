@@ -56,6 +56,8 @@ test('validating all rounds submits a code score and opens the code leaderboard'
   renderGame()
   for (let r = 0; r < CODE_ROUNDS; r++) {
     fireEvent.click(screen.getByRole('button', { name: 'Valider' }))
+    const nextLabel = r === CODE_ROUNDS - 1 ? /voir mon score/i : /suivant/i
+    fireEvent.click(screen.getByRole('button', { name: nextLabel }))
   }
 
   await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/leaderboard?game=code'))
