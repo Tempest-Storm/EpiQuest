@@ -1,4 +1,6 @@
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { API } from '../config'
 import { useAuth } from '../hooks/useAuth'
 
 // The games available from the hub. `to` is the route that launches the game.
@@ -32,6 +34,16 @@ const GAMES = [
 export default function Games() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const [standings, setStandings] = useState({}) // best score per game, keyed by game
+
+  useEffect(() => {
+    const token = localStorage.getItem('token')
+    if (!token) return
+    fetch(`${API}/players/me/all`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => { if (data && typeof data === 'object') setStandings(data) })
+      .catch(err => console.error('Failed to load standings:', err))
+  }, [])
 
   // useAuth redirects to '/' when unauthenticated; render nothing meanwhile.
   if (!user) return null
@@ -60,7 +72,13 @@ export default function Games() {
               </span>
               <span className="flex-1 min-w-0">
                 <span className="block text-sm font-bold text-gray-800">{g.title}</span>
-                <span className="block text-xs text-gray-400">{g.desc}</span>
+                {standings[g.key] ? (
+                  <span className="block text-xs text-indigo-500 font-medium">
+                    🏆 {standings[g.key].score} pts · #{standings[g.key].rank}
+                  </span>
+                ) : (
+                  <span className="block text-xs text-gray-400">{g.desc}</span>
+                )}
               </span>
               <span className="text-gray-300 text-xl">›</span>
             </button>

@@ -23,9 +23,14 @@ function renderGames(withToken = true) {
   )
 }
 
+// What GET /players/me/all resolves to for the current test.
+let standings = {}
+
 beforeEach(() => {
   localStorage.clear()
   navigateMock.mockClear()
+  standings = {}
+  globalThis.fetch = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(standings) }))
 })
 
 afterEach(() => vi.restoreAllMocks())
@@ -36,6 +41,13 @@ test('greets the player and shows the three games', () => {
   expect(screen.getByText('Quiz Epitech')).toBeInTheDocument()
   expect(screen.getByText('Mémoire Epitech')).toBeInTheDocument()
   expect(screen.getByText('Code dans l’ordre')).toBeInTheDocument()
+})
+
+test('shows the personal best on a card once standings load', async () => {
+  localStorage.setItem('token', 'header.payload.sig')
+  standings = { quiz: { score: 150, correct: 2, rank: 1 } }
+  renderGames()
+  expect(await screen.findByText(/150 pts · #1/)).toBeInTheDocument()
 })
 
 test('choosing a game navigates to its route', () => {

@@ -347,6 +347,26 @@ app.get('/players/me', authMiddleware, async (req, res) => {
   }
 })
 
+// The authenticated player's standing across every game, keyed by game, so the
+// hub can show a personal best per game. Games not played are simply absent.
+app.get('/players/me/all', authMiddleware, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT game, score, correct,
+              (SELECT COUNT(*) + 1 FROM players o WHERE o.game = p.game AND o.score > p.score)::int AS rank
+       FROM players p
+       WHERE p.user_id = $1`,
+      [req.user.id]
+    )
+    const byGame = {}
+    for (const r of rows) byGame[r.game] = { score: r.score, correct: r.correct, rank: r.rank }
+    res.json(byGame)
+  } catch (err) {
+    console.error('❌ GET /players/me/all error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 io.on('connection', (socket) => {
   console.log('🔌 Player connected:', socket.id)
   socket.on('disconnect', () => console.log('❌ Player disconnected:', socket.id))
