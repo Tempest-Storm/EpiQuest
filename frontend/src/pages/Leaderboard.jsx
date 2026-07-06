@@ -14,6 +14,7 @@ const GAME_META = {
 
 export default function Leaderboard() {
   const [scores, setScores] = useState([])
+  const [me, setMe] = useState(null) // the player's own standing (with rank)
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const game = GAME_META[searchParams.get('game')] ? searchParams.get('game') : 'quiz'
@@ -31,18 +32,35 @@ export default function Leaderboard() {
         .catch(err => console.error('Failed to load leaderboard:', err))
     }
 
+    // The player's own rank, so they can see their standing even outside the
+    // top 10. Requires the auth token; skipped for anonymous viewers.
+    const fetchMe = () => {
+      const token = localStorage.getItem('token')
+      if (!token) return
+      fetch(`${API}/players/me?game=${game}`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => (r.ok ? r.json() : null))
+        .then(data => setMe(data && typeof data.rank === 'number' ? data : null))
+        .catch(err => console.error('Failed to load rank:', err))
+    }
+
     fetchLeaderboard()
+    fetchMe()
     // The server pushes the updated standings for a game with the event
     // payload; ignore events for other games and fall back to a fetch only if
-    // the payload is missing or malformed.
+    // the payload is missing or malformed. Refresh our own rank on every update.
     const onUpdate = (payload) => {
       if (!payload || payload.game !== game) return
       if (Array.isArray(payload.rows)) setScores(payload.rows)
       else fetchLeaderboard()
+      fetchMe()
     }
     socket.on('leaderboard:update', onUpdate)
     return () => socket.off('leaderboard:update', onUpdate)
   }, [game])
+
+  // Show the pinned "your rank" row only when the player exists but is beyond
+  // the visible top rows.
+  const showMyRank = me && me.rank > scores.length
 
   const medals = ['🥇', '🥈', '🥉']
 
@@ -100,6 +118,24 @@ export default function Leaderboard() {
               </div>
             )
           })}
+
+          {/* The player's own standing when they're outside the visible top rows. */}
+          {showMyRank && (
+            <>
+              <p className="text-center text-gray-300 text-xs">• • •</p>
+              <div className="flex items-center gap-3 rounded-xl px-3 py-3 border-2 bg-indigo-50 border-indigo-500">
+                <span className="text-sm font-bold w-8 text-center flex-shrink-0 text-indigo-600">#{me.rank}</span>
+                {me.avatar && (
+                  <img src={me.avatar} className="w-7 h-7 rounded-full flex-shrink-0" alt="avatar" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate text-indigo-700">{me.pseudo} <span className="text-indigo-400 font-normal">(toi)</span></p>
+                  <p className="text-xs text-indigo-400">{me.correct} {meta.unit}</p>
+                </div>
+                <span className="text-sm font-bold flex-shrink-0 text-indigo-600">{me.score} pts</span>
+              </div>
+            </>
+          )}
 
           <button
             onClick={() => navigate(meta.route)}

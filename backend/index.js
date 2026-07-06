@@ -324,6 +324,29 @@ app.get('/leaderboard', async (req, res) => {
   }
 })
 
+// The authenticated player's own standing for a game (their score plus their
+// rank), so the leaderboard can show it even when they're outside the top 10.
+// Returns null if they haven't played that game yet.
+app.get('/players/me', authMiddleware, async (req, res) => {
+  const game = req.query.game || 'quiz'
+  if (!isValidGame(game)) {
+    return res.status(400).json({ error: 'unknown game' })
+  }
+  try {
+    const { rows } = await pool.query(
+      `SELECT pseudo, avatar, score, correct,
+              (SELECT COUNT(*) + 1 FROM players o WHERE o.game = p.game AND o.score > p.score)::int AS rank
+       FROM players p
+       WHERE p.user_id = $1 AND p.game = $2`,
+      [req.user.id, game]
+    )
+    res.json(rows[0] || null)
+  } catch (err) {
+    console.error('❌ GET /players/me error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 io.on('connection', (socket) => {
   console.log('🔌 Player connected:', socket.id)
   socket.on('disconnect', () => console.log('❌ Player disconnected:', socket.id))

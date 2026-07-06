@@ -20,6 +20,9 @@ const SCORES = [
   { pseudo: 'Bob', avatar: '', score: 200, correct: 2 },
 ]
 
+// What GET /players/me resolves to for the current test (null = not played).
+let meResponse = null
+
 function renderLeaderboard() {
   return render(
     <MemoryRouter>
@@ -30,9 +33,13 @@ function renderLeaderboard() {
 
 beforeEach(() => {
   localStorage.clear()
-  globalThis.fetch = vi.fn(() =>
-    Promise.resolve({ ok: true, json: () => Promise.resolve(SCORES) })
-  )
+  meResponse = null
+  globalThis.fetch = vi.fn((url) => {
+    if (String(url).includes('/players/me')) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(meResponse) })
+    }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(SCORES) })
+  })
 })
 
 afterEach(() => {
@@ -120,4 +127,21 @@ test('tolerates a non-array leaderboard response without crashing', async () => 
   renderLeaderboard()
   // Falls back to the empty state rather than throwing.
   expect(await screen.findByText(/aucun score encore/i)).toBeInTheDocument()
+})
+
+test('pins the player’s own rank when they are outside the top list', async () => {
+  localStorage.setItem('token', 'header.payload.sig')
+  meResponse = { pseudo: 'Zoe', avatar: '', score: 50, correct: 1, rank: 23 }
+  renderLeaderboard()
+  expect(await screen.findByText('#23')).toBeInTheDocument()
+  expect(screen.getByText(/zoe/i)).toBeInTheDocument()
+  expect(screen.getByText(/\(toi\)/)).toBeInTheDocument()
+})
+
+test('does not pin a rank row when the player is already in the visible top list', async () => {
+  localStorage.setItem('token', 'header.payload.sig')
+  meResponse = { pseudo: 'Alice', avatar: '', score: 300, correct: 3, rank: 1 }
+  renderLeaderboard()
+  await screen.findByText('Alice')
+  expect(screen.queryByText(/\(toi\)/)).not.toBeInTheDocument()
 })
