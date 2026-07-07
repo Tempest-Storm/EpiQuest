@@ -9,10 +9,13 @@ function fakeToken(payload) {
   return `header.${btoa(JSON.stringify(payload))}.sig`
 }
 
+// Questions ship WITHOUT the answer — correctness comes from the (mocked)
+// server-side /answers/check endpoint, like in production.
 const QUESTIONS = [
-  { id: 1, question: 'Question un ?', options: ['A1', 'B1', 'C1', 'D1'], answer: 0 },
-  { id: 2, question: 'Question deux ?', options: ['A2', 'B2', 'C2', 'D2'], answer: 2 },
+  { id: 1, question: 'Question un ?', options: ['A1', 'B1', 'C1', 'D1'] },
+  { id: 2, question: 'Question deux ?', options: ['A2', 'B2', 'C2', 'D2'] },
 ]
+const ANSWERS = { 1: 0, 2: 2 }
 
 const USER = { name: 'Ada Lovelace', avatar_url: 'https://example.com/a.png' }
 
@@ -27,7 +30,14 @@ function renderQuiz() {
 
 beforeEach(() => {
   localStorage.clear()
-  globalThis.fetch = vi.fn((url) => {
+  globalThis.fetch = vi.fn((url, opts) => {
+    if (String(url).includes('/answers/check')) {
+      const { id, choice } = JSON.parse(opts.body)
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ correct: ANSWERS[id] === choice, answer: ANSWERS[id] }),
+      })
+    }
     if (String(url).includes('/questions')) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(QUESTIONS) })
     }
@@ -61,7 +71,7 @@ test('persists the token to localStorage on a fresh login', async () => {
   })
 })
 
-test('selecting a correct answer awards points and advances to the next question', async () => {
+test('a correct answer is verified by the server, awards points and advances', async () => {
   renderQuiz()
   await screen.findByText('Question un ?')
   expect(screen.getByText('0 pts')).toBeInTheDocument()
@@ -69,11 +79,46 @@ test('selecting a correct answer awards points and advances to the next question
   // Click the correct answer (index 0) for question one.
   fireEvent.click(screen.getByText('A1'))
 
+  // The check request carries the question id, the choice and the JWT.
+  await waitFor(() => {
+    const call = globalThis.fetch.mock.calls.find(([u]) => String(u).includes('/answers/check'))
+    expect(call).toBeTruthy()
+    expect(JSON.parse(call[1].body)).toEqual({ id: 1, choice: 0 })
+    expect(call[1].headers.Authorization).toMatch(/^Bearer /)
+  })
+
   // After the 1s reveal delay, the quiz advances to question two.
   expect(await screen.findByText('Question deux ?', {}, { timeout: 2000 })).toBeInTheDocument()
   expect(screen.getByText('Question 2 / 2')).toBeInTheDocument()
   // A correct answer is worth at least the base points (50), so no longer 0.
   expect(screen.queryByText('0 pts')).not.toBeInTheDocument()
+})
+
+test('a wrong answer earns no points and still advances', async () => {
+  renderQuiz()
+  await screen.findByText('Question un ?')
+
+  fireEvent.click(screen.getByText('B1')) // wrong (correct is A1)
+
+  expect(await screen.findByText('Question deux ?', {}, { timeout: 2000 })).toBeInTheDocument()
+  expect(screen.getByText('0 pts')).toBeInTheDocument()
+})
+
+test('a failed answer check counts as wrong but the game keeps moving', async () => {
+  globalThis.fetch = vi.fn((url) => {
+    if (String(url).includes('/answers/check')) return Promise.reject(new Error('network down'))
+    if (String(url).includes('/questions')) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(QUESTIONS) })
+    }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+  })
+  renderQuiz()
+  await screen.findByText('Question un ?')
+
+  fireEvent.click(screen.getByText('A1'))
+
+  expect(await screen.findByText('Question deux ?', {}, { timeout: 2000 })).toBeInTheDocument()
+  expect(screen.getByText('0 pts')).toBeInTheDocument()
 })
 
 test('redirects to home when there is no token', async () => {

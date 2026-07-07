@@ -246,6 +246,28 @@ app.get('/questions', async (req, res) => {
   }
 })
 
+// Server-side answer verification, so correct answers never have to ship to
+// the browser. Returns whether the choice was right plus the correct index
+// (for highlighting) — only after the player has committed to an answer.
+// Auth required so harvesting answers at least needs an account; the limit is
+// sized for a stand where many phones share one egress IP (~10 answers per
+// game per player).
+const answerLimiter = rateLimit({ windowMs: 60 * 1000, limit: 300, standardHeaders: true, legacyHeaders: false })
+app.post('/answers/check', answerLimiter, authMiddleware, async (req, res) => {
+  const { id, choice } = req.body
+  if (!Number.isInteger(id) || !Number.isInteger(choice) || choice < 0) {
+    return res.status(400).json({ error: 'id and choice must be non-negative integers' })
+  }
+  try {
+    const { rows } = await pool.query('SELECT answer FROM questions WHERE id = $1', [id])
+    if (!rows[0]) return res.status(404).json({ error: 'Unknown question' })
+    res.json({ correct: rows[0].answer === choice, answer: rows[0].answer })
+  } catch (err) {
+    console.error('❌ POST /answers/check error:', err.message)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
 app.post('/players', writeLimiter, authMiddleware, async (req, res) => {
   const { score, correct, game = 'quiz' } = req.body
   const { id, name, avatar_url } = req.user

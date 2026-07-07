@@ -11,6 +11,9 @@ export default function Quiz() {
   const [questions, setQuestions] = useState([])
   const [current, setCurrent] = useState(0)
   const [selected, setSelected] = useState(null)
+  // The correct index for the current question, as reported by the server
+  // after the player answers; null while unanswered or awaiting the check.
+  const [serverAnswer, setServerAnswer] = useState(null)
   const [score, setScore] = useState(0)
   const [correct, setCorrect] = useState(0)
   const [timeLeft, setTimeLeft] = useState(MAX_TIME)
@@ -62,6 +65,7 @@ export default function Quiz() {
     } else {
       setCurrent(c => c + 1)
       setSelected(null)
+      setServerAnswer(null)
       setAnswered(false)
       setTimeLeft(MAX_TIME)
     }
@@ -71,16 +75,28 @@ export default function Quiz() {
     if (answered) return
     setSelected(i)
     setAnswered(true)
-    const isCorrect = i === questions[current].answer
-    let newScore = score
-    let newCorrect = correct
-    if (isCorrect) {
-      newScore = score + computeScore(timeLeft)
-      newCorrect = correct + 1
-      setScore(newScore)
-      setCorrect(newCorrect)
-    }
-    setTimeout(() => handleNext(newScore, newCorrect), 1000)
+    // Answers are verified server-side so the correct index never ships with
+    // the questions (no devtools cheating). On network failure the answer
+    // counts as wrong but the game keeps moving.
+    fetch(`${API}/answers/check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ id: questions[current].id, choice: i })
+    })
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+      .catch(err => { console.error('Answer check failed:', err); return { correct: false, answer: null } })
+      .then(({ correct: isCorrect, answer }) => {
+        setServerAnswer(answer)
+        let newScore = score
+        let newCorrect = correct
+        if (isCorrect) {
+          newScore = score + computeScore(timeLeft)
+          newCorrect = correct + 1
+          setScore(newScore)
+          setCorrect(newCorrect)
+        }
+        setTimeout(() => handleNext(newScore, newCorrect), 1000)
+      })
   }
 
   useEffect(() => {
@@ -153,9 +169,15 @@ export default function Quiz() {
           </div>
           <div className="flex flex-col gap-2">
             {q.options.map((opt, i) => {
+              // Before the server responds (serverAnswer null), the pick shows
+              // as neutral "pending"; then green/red once verified.
               let style = 'bg-white border-gray-200 text-gray-800'
               if (answered) {
-                if (i === q.answer) style = 'bg-green-50 border-green-500 text-green-800'
+                if (serverAnswer === null) {
+                  style = i === selected
+                    ? 'bg-indigo-50 border-indigo-400 text-indigo-800'
+                    : 'bg-white border-gray-100 text-gray-400'
+                } else if (i === serverAnswer) style = 'bg-green-50 border-green-500 text-green-800'
                 else if (i === selected) style = 'bg-red-50 border-red-400 text-red-800'
                 else style = 'bg-white border-gray-100 text-gray-400'
               }
@@ -167,8 +189,9 @@ export default function Quiz() {
                 >
                   <span className={[
                     'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0',
-                    answered && i === q.answer ? 'bg-green-500 text-white' :
-                    answered && i === selected ? 'bg-red-400 text-white' :
+                    answered && serverAnswer !== null && i === serverAnswer ? 'bg-green-500 text-white' :
+                    answered && serverAnswer !== null && i === selected ? 'bg-red-400 text-white' :
+                    answered && serverAnswer === null && i === selected ? 'bg-indigo-500 text-white' :
                     'bg-gray-100 text-gray-500'
                   ].join(' ')}>
                     {letters[i]}
