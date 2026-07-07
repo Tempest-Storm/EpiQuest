@@ -231,14 +231,16 @@ app.get('/health', async (req, res) => {
 // ── GAME ROUTES ───────────────────────────────────────────────
 // Returns quiz questions. With ?limit=N, returns a random N from the pool
 // (so a larger pool gives variety without lengthening each game); otherwise
-// returns them all in id order.
+// returns them all in id order. The correct answer index is deliberately
+// NOT included — answers are verified via POST /answers/check so they never
+// reach the browser.
 app.get('/questions', async (req, res) => {
   const rawLimit = parseInt(req.query.limit, 10)
   const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : null
   try {
     const result = limit
-      ? await pool.query('SELECT * FROM questions ORDER BY RANDOM() LIMIT $1', [limit])
-      : await pool.query('SELECT * FROM questions ORDER BY id')
+      ? await pool.query('SELECT id, question, options FROM questions ORDER BY RANDOM() LIMIT $1', [limit])
+      : await pool.query('SELECT id, question, options FROM questions ORDER BY id')
     res.json(result.rows)
   } catch (err) {
     console.error('❌ GET /questions error:', err.message)
