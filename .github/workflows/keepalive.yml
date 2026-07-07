@@ -1,0 +1,21 @@
+# Render's free tier spins the backend down after ~15 minutes of inactivity,
+# so the first visitor of the day waits ~50s for a cold start. Pinging
+# /health every 10 minutes keeps the service warm (and doubles as an uptime
+# check: the run fails if the health endpoint doesn't report ok).
+name: Keep backend warm
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /health
+        run: |
+          # Generous timeout: the ping itself may hit a cold start.
+          body=$(curl -sS --max-time 90 https://epiquest-api.onrender.com/health)
+          echo "health: $body"
+          echo "$body" | grep -q '"status":"ok"'
