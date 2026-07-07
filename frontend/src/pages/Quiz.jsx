@@ -19,6 +19,7 @@ export default function Quiz() {
   const [timeLeft, setTimeLeft] = useState(MAX_TIME)
   const [answered, setAnswered] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [slowLoad, setSlowLoad] = useState(false)
   const [error, setError] = useState(false)
 
   // Load the questions once the player is authenticated.
@@ -39,6 +40,14 @@ export default function Quiz() {
         setLoading(false)
       })
   }, [user])
+
+  // The free-tier backend cold-starts after idling (~50s); past 5 seconds of
+  // loading, reassure the player instead of looking frozen.
+  useEffect(() => {
+    if (!loading) return
+    const t = setTimeout(() => setSlowLoad(true), 5000)
+    return () => clearTimeout(t)
+  }, [loading])
 
   const handleNext = useCallback((currentScore, currentCorrect) => {
     const finalScore = currentScore ?? score
@@ -113,7 +122,14 @@ export default function Quiz() {
 
   if (loading) return (
     <div className="min-h-screen bg-[#F5F4F2] flex items-center justify-center">
-      <p className="text-gray-400 text-sm">Chargement des questions...</p>
+      <div className="text-center px-6">
+        <p className="text-gray-400 text-sm">Chargement des questions...</p>
+        {slowLoad && (
+          <p className="text-gray-300 text-xs mt-2">
+            Le serveur se réveille, encore quelques secondes… ⏳
+          </p>
+        )}
+      </div>
     </div>
   )
 
