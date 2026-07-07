@@ -25,6 +25,14 @@ EpiQuest est une web app qui permet aux visiteurs d'une JPO Epitech de découvri
   - 🃏 **Mémoire Epitech** — retrouve les paires le plus vite possible
   - 🧩 **Code dans l'ordre** — remets les lignes d'un extrait de code dans le bon ordre
 - 🏆 **Leaderboard live** — classement par jeu, mis à jour en temps réel via WebSocket
+- 🖨️ **Affiche imprimable** — [/affiche.html](https://epiquest.vercel.app/affiche.html) : le QR code prêt à poser sur le stand
+
+## 🔒 Sécurité
+
+- Réponses du quiz vérifiées **côté serveur** (jamais envoyées au navigateur)
+- Scores validés par des bornes de plausibilité par jeu (anti-triche)
+- JWT signé (HS256 épinglé), en-têtes de sécurité (helmet + Vercel), rate limiting, CORS restreint
+- 0 vulnérabilité `npm audit` ; suite de 86 tests exécutée en CI à chaque push
 
 ---
 
