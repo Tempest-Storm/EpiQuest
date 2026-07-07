@@ -117,6 +117,9 @@ async function initDatabase() {
     `)
     await client.query('DROP INDEX IF EXISTS players_user_id_key')
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS players_user_game_key ON players(user_id, game)')
+    // Serves the per-game top-10 (WHERE game ORDER BY score DESC) and the
+    // rank subquery (COUNT of higher scores in the same game).
+    await client.query('CREATE INDEX IF NOT EXISTS players_game_score_idx ON players(game, score DESC)')
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS questions (

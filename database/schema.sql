@@ -31,6 +31,10 @@ CREATE TABLE IF NOT EXISTS players (
 
 CREATE UNIQUE INDEX IF NOT EXISTS players_user_game_key ON players(user_id, game);
 
+-- Serves the per-game leaderboard (WHERE game ORDER BY score DESC) and rank
+-- computations (COUNT of higher scores within a game).
+CREATE INDEX IF NOT EXISTS players_game_score_idx ON players(game, score DESC);
+
 -- Quiz questions. `options` is a JSON array of strings; `answer` is the
 -- zero-based index into that array of the correct option.
 CREATE TABLE IF NOT EXISTS questions (
