@@ -54,6 +54,30 @@ test('rejects a token signed with the wrong secret', () => {
   assert.equal(res.statusCode, 401)
 })
 
+test('rejects an unsigned (alg: none) token', () => {
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url')
+  const token = `${b64({ alg: 'none', typ: 'JWT' })}.${b64({ id: 1 })}.`
+  const req = { headers: { authorization: `Bearer ${token}` } }
+  const res = mockRes()
+  let nextCalled = false
+  authMiddleware(req, res, () => { nextCalled = true })
+
+  assert.equal(nextCalled, false)
+  assert.equal(res.statusCode, 401)
+})
+
+test('rejects a token signed with a non-pinned algorithm', () => {
+  // Correct secret but HS512 — the middleware pins HS256, so this must fail.
+  const token = jwt.sign({ id: 1 }, process.env.JWT_SECRET, { algorithm: 'HS512' })
+  const req = { headers: { authorization: `Bearer ${token}` } }
+  const res = mockRes()
+  let nextCalled = false
+  authMiddleware(req, res, () => { nextCalled = true })
+
+  assert.equal(nextCalled, false)
+  assert.equal(res.statusCode, 401)
+})
+
 test('accepts a valid token and attaches the payload to req.user', () => {
   const token = jwt.sign({ id: 42, name: 'Ada', email: 'ada@example.com' }, process.env.JWT_SECRET)
   const req = { headers: { authorization: `Bearer ${token}` } }
